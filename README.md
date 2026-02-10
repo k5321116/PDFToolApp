@@ -16,3 +16,5 @@
 1. 依存ライブラリのインストール
    ```bash
    pip install -r requirements.txt
+2. スクリプトの実行
+   python pdf_merger.py
