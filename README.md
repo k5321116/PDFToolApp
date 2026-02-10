@@ -17,4 +17,5 @@
    ```bash
    pip install -r requirements.txt
 2. スクリプトの実行
+   ```bash
    python pdf_merger.py
