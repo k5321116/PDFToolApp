@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>PDF Utility Suite</title>
+    <style>
+        body { background-color: #1a1a1a; color: white; font-family: 'Segoe UI', sans-serif; margin: 0; overflow: hidden; }
+        .stage { display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw; }
+        .container {
+            border: 2px solid #333; padding: 40px; border-radius: 20px; background-color: #252525;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 550px; min-height: 580px;
+            display: flex; flex-direction: column; position: relative;
+        }
+        .view { display: none; flex-direction: column; height: 100%; }
+        .active { display: flex; }
+
+        #file-list {
+            list-style: none; padding: 0; margin: 15px 0; max-height: 250px;
+            overflow-y: auto; border: 1px solid #444; border-radius: 8px; background: #1a1a1a;
+        }
+        .file-item {
+            padding: 8px 12px; border-bottom: 1px solid #333; display: flex; align-items: center;
+            font-size: 13px; background: #252525; cursor: grab;
+        }
+        .file-item:active { cursor: grabbing; background: #333; }
+        .file-item::before { content: "⠿"; margin-right: 12px; color: #555; font-weight: bold; }
+        .file-name { flex-grow: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 10px; color: #ccc; }
+        
+        .btn-delete { 
+            background: none; color: #888; border: 1px solid #444; border-radius: 4px; 
+            padding: 3px 8px; cursor: pointer; font-size: 11px; width: auto !important; transition: all 0.2s;
+        }
+        .btn-delete:hover { background: rgba(231, 76, 60, 0.1); color: #e74c3c; border-color: #e74c3c; }
+
+        .options-bar { 
+            display: flex; align-items: center; gap: 15px; margin: 10px 0; 
+            padding: 10px; background: #1a1a1a; border-radius: 8px; font-size: 13px; border: 1px solid #333;
+        }
+
+        button { padding: 12px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 8px; font-size: 14px; margin: 5px 0; width: 100%; transition: background 0.2s; }
+        button:hover { background: #0056b3; }
+        .btn-small { width: auto; padding: 6px 12px; font-size: 12px; background: #444; margin-left: 10px; }
+        .btn-secondary { background: #444; }
+        .btn-success { background: #28a745; font-weight: bold; margin-top: auto; }
+        .path-text { font-size: 11px; color: #888; margin-bottom: 10px; text-align: center; }
+        .back-link { color: #007bff; text-decoration: none; font-size: 14px; margin-bottom: 20px; display: block; }
+
+        #overlay-container {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(37, 37, 37, 0.95); border-radius: 20px;
+            display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 500;
+        }
+        .progress-outer { width: 80%; background-color: #333; border-radius: 10px; margin: 20px 0; height: 12px; overflow: hidden; }
+        #p-bar { width: 0%; height: 100%; background-color: #2ecc71; transition: width 0.3s ease; }
+        .spinner { border: 4px solid rgba(255,255,255,0.1); border-left-color: #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 15px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<div class="stage">
+    <div id="view-home" class="view container active">
+        <h1 style="color: #007bff; text-align: center; margin-bottom: 30px;">PDF Utility Suite</h1>
+        <button onclick="navTo('view-convert')">Word → PDF 変換</button>
+        <button onclick="navTo('view-merge-setup')" class="btn-secondary">PDF 結合 (並び替え可)</button>
+    </div>
+
+    <div id="view-convert" class="view container">
+        <a href="#" onclick="navTo('view-home')" class="back-link">← ホームに戻る</a>
+        <h2>Word → PDF 変換</h2>
+        <button id="btn-conv-src" class="btn-secondary">読み込みフォルダを選択</button><p id="txt-conv-src" class="path-text">未選択</p>
+        <button id="btn-conv-dest" class="btn-secondary">保存先フォルダを選択</button><p id="txt-conv-dest" class="path-text">未選択</p>
+        <button onclick="startConvert()" class="btn-success">変換開始</button>
+    </div>
+
+    <div id="view-merge-setup" class="view container">
+        <a href="#" onclick="navTo('view-home')" class="back-link">← ホームに戻る</a>
+        <h2>PDF 結合 - 手順1</h2>
+        <p style="font-size: 13px; color: #ccc;">結合したいファイルまたはフォルダを選んでください</p>
+        <button id="btn-merge-add">ファイル・フォルダを追加</button>
+        <p id="txt-merge-count" class="path-text">現在：0 ファイル</p>
+        <button onclick="navToMergeSort()" class="btn-success">次へ：並び替えと設定</button>
+    </div>
+
+    <div id="view-merge-sort" class="view container">
+        <a href="#" onclick="navTo('view-merge-setup')" class="back-link">← 手順1に戻る</a>
+        <h2>PDF 結合 - 手順2</h2>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+            <span style="font-size: 12px; color: #888;">ドラッグして順序を調整してください</span>
+            <button class="btn-small" onclick="sortFilesNatural()">名前順で整列 (自然ソート)</button>
+        </div>
+        <ul id="file-list"></ul>
+        <div class="options-bar" style="flex-direction: column; align-items: flex-start;">
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="check-page-num" checked> ページ番号を挿入する
+            </label>
+            <div style="margin-top: 5px; font-size: 11px; color: #ccc;">
+                <span>除外するページ番号 (例: 1, 8): </span>
+                <input type="text" id="input-exclude-pages" placeholder="8" style="width: 60px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; padding: 2px;">
+            </div>
+        </div>
+        <button id="btn-merge-save" class="btn-secondary">保存ファイル名を指定</button>
+        <p id="txt-merge-save" class="path-text">未選択</p>
+        <button onclick="startMerge()" class="btn-success">結合開始</button>
+    </div>
+
+    <div id="overlay-container">
+        <div class="spinner"></div>
+        <div id="percent-text" style="font-size: 24px; font-weight: bold; margin-bottom: 10px;">0%</div>
+        <div class="progress-outer"><div id="p-bar"></div></div>
+        <p id="overlay-msg" style="text-align: center; color: #aaa;">処理中...</p>
+        <button id="btn-complete-home" style="display: none; background-color: #28a745; width: 200px;" onclick="location.reload()">ホームに戻る</button>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script>
+    const { ipcRenderer } = require('electron');
+    const fs = require('fs');
+    const path = require('path');
+
+    // 管理用変数を集約
+    let paths = {
+        convSrc: "",
+        convDest: "",
+        mergeFileList: [],
+        mergeSave: ""
+    };
+
+    function navTo(id) {
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+    }
+
+    // --- Word 変換処理 ---
+    document.getElementById('btn-conv-src').onclick = async () => {
+        const p = await ipcRenderer.invoke('select-directory');
+        if (p) {
+            paths.convSrc = p;
+            document.getElementById('txt-conv-src').innerText = p;
+        }
+    };
+    document.getElementById('btn-conv-dest').onclick = async () => {
+        const p = await ipcRenderer.invoke('select-directory');
+        if (p) {
+            paths.convDest = p;
+            document.getElementById('txt-conv-dest').innerText = p;
+        }
+    };
+    function startConvert() {
+        if(!paths.convSrc || !paths.convDest) return alert("フォルダを選んでください");
+        showOverlay();
+        ipcRenderer.send('run-python', { sourceDir: paths.convSrc, destDir: paths.convDest });
+    }
+
+    // --- PDF 結合：手順1 ---
+    document.getElementById('btn-merge-add').onclick = async () => {
+        const result = await ipcRenderer.invoke('select-files-and-dirs');
+        if (result) {
+            result.forEach(p => scanAndPush(p));
+            document.getElementById('txt-merge-count').innerText = `現在：${paths.mergeFileList.length} ファイル`;
+        }
+    };
+
+    function scanAndPush(fPath) {
+        const stat = fs.statSync(fPath);
+        if (stat.isDirectory()) {
+            fs.readdirSync(fPath).forEach(f => scanAndPush(path.join(fPath, f)));
+        } else if (fPath.toLowerCase().endsWith('.pdf')) {
+            if (!paths.mergeFileList.includes(fPath)) paths.mergeFileList.push(fPath);
+        }
+    }
+
+    // --- PDF 結合：手順2 ---
+    function renderList() {
+        const listElem = document.getElementById('file-list');
+        listElem.innerHTML = "";
+        paths.mergeFileList.forEach((fPath, index) => {
+            const li = document.createElement('li');
+            li.className = 'file-item';
+            li.dataset.path = fPath;
+            
+            const chk = document.createElement('input');
+            chk.type = 'checkbox';
+            chk.className = 'file-page-check';
+            chk.checked = true;
+            chk.style.marginRight = '10px';
+
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'file-name';
+            nameSpan.innerText = path.basename(fPath);
+            
+            const delBtn = document.createElement('button');
+            delBtn.className = 'btn-delete';
+            delBtn.innerText = '✕'; 
+            delBtn.onclick = (e) => {
+                e.stopPropagation();
+                paths.mergeFileList.splice(index, 1);
+                renderList();
+                document.getElementById('txt-merge-count').innerText = `現在：${paths.mergeFileList.length} ファイル`;
+            };
+
+            li.appendChild(chk);
+            li.appendChild(nameSpan);
+            li.appendChild(delBtn);
+            listElem.appendChild(li);
+        });
+    }
+
+    function navToMergeSort() {
+        if (paths.mergeFileList.length === 0) return alert("ファイルを追加してください");
+        renderList();
+        new Sortable(document.getElementById('file-list'), { 
+            animation: 150,
+            onEnd: () => {
+                paths.mergeFileList = Array.from(document.getElementById('file-list').children).map(li => li.dataset.path);
+            }
+        });
+        navTo('view-merge-sort');
+    }
+
+    function sortFilesNatural() {
+        const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+        paths.mergeFileList.sort((a, b) => collator.compare(path.basename(a), path.basename(b)));
+        renderList();
+    }
+
+    document.getElementById('btn-merge-save').onclick = async () => {
+        const p = await ipcRenderer.invoke('select-save-path');
+        if (p) {
+            paths.mergeSave = p;
+            document.getElementById('txt-merge-save').innerText = p;
+        }
+    };
+
+    function startMerge() {
+        const listItems = Array.from(document.getElementById('file-list').children);
+        const orderedPaths = listItems.map(li => li.dataset.path);
+        const excludedFiles = listItems
+            .filter(li => !li.querySelector('.file-page-check').checked)
+            .map(li => li.dataset.path);
+
+        const isPageNumEnabled = document.getElementById('check-page-num').checked;
+        const excludePagesStr = document.getElementById('input-exclude-pages').value || "";
+
+        if (orderedPaths.length === 0 || !paths.mergeSave) return alert("設定を確認してください");
+        
+        showOverlay();
+        ipcRenderer.send('run-merge', { 
+            filePaths: orderedPaths, 
+            savePath: paths.mergeSave,
+            addPageNum: isPageNumEnabled,
+            excludePages: excludePagesStr,
+            excludeFiles: excludedFiles
+        });
+    }
+
+    // --- UI Control ---
+    function showOverlay() {
+        document.getElementById('overlay-container').style.display = 'flex';
+        document.getElementById('p-bar').style.width = '0%';
+        document.getElementById('percent-text').innerText = '0%';
+        document.getElementById('overlay-msg').innerText = '処理中...';
+        document.getElementById('btn-complete-home').style.display = 'none';
+    }
+
+    ipcRenderer.on('python-progress', (e, p) => {
+        document.getElementById('p-bar').style.width = p + '%';
+        document.getElementById('percent-text').innerText = p + '%';
+    });
+
+    ipcRenderer.on('python-result', (e, msg) => {
+        document.getElementById('percent-text').innerText = "完了";
+        document.getElementById('p-bar').style.width = '100%';
+        document.getElementById('overlay-msg').innerHTML = msg;
+        document.getElementById('btn-complete-home').style.display = 'block';
+        const spinner = document.querySelector('.spinner');
+        if (spinner) spinner.style.display = 'none';
+    });
+</script>
+</body>
+</html>
