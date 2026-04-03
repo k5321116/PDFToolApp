@@ -172,6 +172,9 @@
     let checkStates = {};
     let currentMode = "";
     let deletedFilesPool = [];
+    let isDialogOpen = false;
+
+    
     
     function navToHome() {
         paths.mergeFileList = [];
@@ -191,10 +194,17 @@
 
     // --- Word 変換処理 ---
     document.getElementById('btn-conv-src').onclick = async () => {
-        const p = await ipcRenderer.invoke('select-directory');
-        if (p) {
-            paths.convSrc = p;
-            document.getElementById('txt-conv-src').innerText = p;
+        if (isDialogOpen) return; // ★既に入力待機中なら何もしない
+        
+        isDialogOpen = true; // フラグを立てる
+        try {
+            const p = await ipcRenderer.invoke('select-directory');
+            if (p) {
+                paths.convSrc = p;
+                document.getElementById('txt-conv-src').innerText = p;
+            }
+        } finally {
+            isDialogOpen = false; // 成功・失敗に関わらず最後にフラグを下ろす
         }
     };
     document.getElementById('btn-conv-dest').onclick = async () => {
@@ -214,10 +224,17 @@
 
     // --- PDF 結合：手順1 ---
     document.getElementById('btn-merge-add').onclick = async () => {
-        const result = await ipcRenderer.invoke('select-files-and-dirs');
-        if (result) {
-            result.forEach(p => scanAndPush(p));
-            document.getElementById('txt-merge-count').innerText = `現在：${paths.mergeFileList.length} ファイル`;
+        if (isDialogOpen) return;
+        
+        isDialogOpen = true;
+        try {
+            const result = await ipcRenderer.invoke('select-files-and-dirs');
+            if (result) {
+                result.forEach(p => scanAndPush(p));
+                document.getElementById('txt-merge-count').innerText = `現在：${paths.mergeFileList.length} ファイル`;
+            }
+        } finally {
+            isDialogOpen = false;
         }
     };
 
