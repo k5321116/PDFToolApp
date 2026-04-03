@@ -110,9 +110,22 @@
     <div id="view-merge-sort" class="view container">
         <a href="#" onclick="navTo('view-merge-setup')" class="back-link">← 手順1に戻る</a>
         <h2>PDF 結合 - 手順2</h2>
+
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
             <span style="font-size: 12px; color: #888;">ドラッグして順序を調整してください</span>
-            <button class="btn-small" onclick="sortFilesNatural()">名前順で整列 (自然ソート)</button>
+            <div>
+                <button id="btn-show-trash" class="btn-small" style="background: #666; display: none;" onclick="toggleTrashOverlay(true)">🗑 削除済みファイル</button>
+                <button class="btn-small" onclick="sortFilesNatural()">名前順で整列</button>
+            </div>
+        </div>
+
+        <div id="trash-overlay" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center;">
+            <div style="background: #252525; width: 80%; max-height: 80%; border-radius: 15px; padding: 20px; display: flex; flex-direction: column;">
+                <h3>削除済みファイルリスト</h3>
+                <p style="font-size: 12px; color: #888;">クリックすると結合リストに復元します</p>
+                <ul id="trash-list" style="flex-grow: 1; overflow-y: auto; border: 1px solid #444; padding: 10px; list-style: none;"></ul>
+                <button class="btn-secondary" onclick="toggleTrashOverlay(false)" style="margin-top: 15px;">閉じる</button>
+            </div>
         </div>
         <ul id="file-list"></ul>
         <div class="options-bar" style="flex-direction: column; align-items: flex-start;">
@@ -157,8 +170,8 @@
     };
 
     let checkStates = {};
- 
     let currentMode = "";
+    let deletedFilesPool = [];
     
     function navToHome() {
         paths.mergeFileList = [];
@@ -257,10 +270,18 @@
             delBtn.innerText = '✕'; 
             delBtn.onclick = (e) => {
                 e.stopPropagation();
+                const itemToTrash = {
+                    path: fPath,
+                    index: index,
+                    checked: checkStates[fPath]
+                }
+                deletedFilesPool.push(itemToTrash);
+
                 delete checkStates[fPath]; // チェック状態も削除
                 paths.mergeFileList.splice(index, 1);
                 renderList();
                 document.getElementById('txt-merge-count').innerText = `現在：${paths.mergeFileList.length} ファイル`;
+                updateTrashButton();
             };
 
             li.appendChild(handle);
@@ -271,9 +292,62 @@
         });
     }
 
+    function restoreFile(index) {
+        const restored = deletedFilesPool.splice(index, 1)[0];
+        
+        // 結合リストに再追加（重複チェック）
+        if (!paths.mergeFileList.includes(restored.path)) {
+            paths.mergeFileList.push(restored.path);
+            checkStates[restored.path] = restored.checked;
+        }
+        
+        renderList();
+        renderTrashList(); // ゴミ箱の中身を再描画
+        document.getElementById('txt-merge-count').innerText = `現在：${paths.mergeFileList.length} ファイル`;
+        updateTrashButton();
+    }
+
+    // ゴミ箱の表示切り替え
+    function toggleTrashOverlay(show) {
+        const overlay = document.getElementById('trash-overlay');
+        overlay.style.display = show ? 'flex' : 'none';
+        if (show) renderTrashList();
+    }
+
+    // ゴミ箱の中身を描画
+    function renderTrashList() {
+        const trashListElem = document.getElementById('trash-list');
+        trashListElem.innerHTML = "";
+        
+        if (deletedFilesPool.length === 0) {
+            trashListElem.innerHTML = "<li style='color: #666; text-align: center; margin-top: 20px;'>削除されたファイルはありません</li>";
+            return;
+        }
+
+        deletedFilesPool.forEach((item, index) => {
+            const li = document.createElement('li');
+            li.className = 'file-item';
+            li.style.cursor = 'pointer';
+            li.innerHTML = `<span class='file-name'>${path.basename(item.path)}</span> <span style="color: #28a745;">⊕ 復元</span>`;
+            li.onclick = () => restoreFile(index);
+            trashListElem.appendChild(li);
+        });
+    }
+
+    // ゴミ箱ボタンの表示/非表示（中身があるときだけ出す）
+    function updateTrashButton() {
+        const btn = document.getElementById('btn-show-trash');
+        btn.style.display = deletedFilesPool.length > 0 ? 'inline-block' : 'none';
+    }
+
+
     function navToMergeSort() {
         if (paths.mergeFileList.length === 0) return alert("ファイルを追加してください");
         renderList();
+
+        const list = document.getElementById('file-list');
+        if (list._sortable) list._sortable.destroy();
+        
         new Sortable(document.getElementById('file-list'), { 
             animation: 150,
             onEnd: () => {
