@@ -84,7 +84,7 @@
     </div>
 
     <div id="view-convert" class="view container">
-        <a href="#" onclick="navTo('view-home')" class="back-link">← ホームに戻る</a>
+        <a href="#" onclick="navToHome()" class="back-link">← ホームに戻る</a>
         <h2>Word → PDF 変換</h2>
         <button id="btn-conv-src" class="btn-secondary">読み込みフォルダを選択</button>
         <div id="drop-zone-convert" class="drop-zone">
@@ -96,7 +96,7 @@
     </div>
 
     <div id="view-merge-setup" class="view container">
-        <a href="#" onclick="navTo('view-home')" class="back-link">← ホームに戻る</a>
+        <a href="#" onclick="navToHome()" class="back-link">← ホームに戻る</a>
         <h2>PDF 結合 - 手順1</h2>
         <p style="font-size: 13px; color: #ccc;">結合したいファイルまたはフォルダを選んでください</p>
         <button id="btn-merge-add">ファイル・フォルダを追加</button>
@@ -134,7 +134,11 @@
         <div id="percent-text" style="font-size: 24px; font-weight: bold; margin-bottom: 10px;">0%</div>
         <div class="progress-outer"><div id="p-bar"></div></div>
         <p id="overlay-msg" style="text-align: center; color: #aaa;">処理中...</p>
-        <button id="btn-complete-home" style="display: none; background-color: #28a745; width: 200px;" onclick="location.reload()">ホームに戻る</button>
+        <div id="post-process-actions" style="display: none; gap: 15px; margin-top: 20px; justify-content: center; width: 100%;">
+            <button id="btn-complete-home" style="background-color: #444; width: 180px; margin: 0;" onclick="location.reload()">ホームに戻る</button>
+            <button id="btn-go-to-merge" class="btn-success" style="width: 180px; margin: 0; display: none;" onclick="goToMergeDirectly()">PDF結合画面へ →</button>
+            <button id="btn-open-folder" class="btn-small" style="background-color: #28a745; width: 180px; margin: 0; display: none;" onclick="openResultFolder()">保存先を開く</button>
+        </div>
     </div>
 </div>
 
@@ -151,6 +155,21 @@
         mergeFileList: [],
         mergeSave: ""
     };
+
+    let checkStates = {};
+ 
+    let currentMode = "";
+    
+    function navToHome() {
+        paths.mergeFileList = [];
+        paths.mergeSave = "";
+        checkStates = {};
+        document.getElementById('txt-merge-count').innerText = '現在：0 ファイル';
+        document.getElementById('txt-merge-save').innerText = '未選択';
+        document.getElementById('input-exclude-pages').value = '';
+        document.getElementById('check-page-num').checked = true;
+        navTo('view-home');
+    }
 
     function navTo(id) {
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -172,8 +191,10 @@
             document.getElementById('txt-conv-dest').innerText = p;
         }
     };
+
     function startConvert() {
         if(!paths.convSrc || !paths.convDest) return alert("フォルダを選んでください");
+        currentMode = "convert";
         showOverlay();
         ipcRenderer.send('run-python', { sourceDir: paths.convSrc, destDir: paths.convDest });
     }
@@ -208,8 +229,24 @@
             const chk = document.createElement('input');
             chk.type = 'checkbox';
             chk.className = 'file-page-check';
-            chk.checked = true;
+            chk.checked = checkStates[fPath] !== false; // デフォルトはチェックあり
             chk.style.marginRight = '10px';
+            chk.addEventListener('change', () => {
+                checkStates[fPath] = chk.checked;
+            });
+
+            const handle = document.createElement('span');
+            handle.className = "drag-handle"; // ★ハンドル専用のクラス
+            handle.style.cursor = "grab";
+            handle.style.marginRight = "12px";
+            handle.style.color = "#555";
+
+            li.onclick = (e) => {
+            // ハンドルや削除ボタン、チェックボックス自体を直接触った時は何もしない
+            if (e.target === handle || e.target === chk || e.target.className === 'btn-delete') return;
+            chk.checked = !chk.checked; // チェック状態を反転
+            checkStates[fPath] = chk.checked; // 状態を保存
+            };
 
             const nameSpan = document.createElement('span');
             nameSpan.className = 'file-name';
@@ -220,11 +257,13 @@
             delBtn.innerText = '✕'; 
             delBtn.onclick = (e) => {
                 e.stopPropagation();
+                delete checkStates[fPath]; // チェック状態も削除
                 paths.mergeFileList.splice(index, 1);
                 renderList();
                 document.getElementById('txt-merge-count').innerText = `現在：${paths.mergeFileList.length} ファイル`;
             };
 
+            li.appendChild(handle);
             li.appendChild(chk);
             li.appendChild(nameSpan);
             li.appendChild(delBtn);
@@ -237,6 +276,14 @@
         renderList();
         new Sortable(document.getElementById('file-list'), { 
             animation: 150,
+            onEnd: () => {
+                paths.mergeFileList = Array.from(document.getElementById('file-list').children).map(li => li.dataset.path);
+            }
+        });
+
+        new Sortable(document.getElementById('file-list'), { 
+            animation: 150,
+            handle: '.drag-handle', // ★ここを追加！これだけで「⠿」以外では並び替えしなくなります
             onEnd: () => {
                 paths.mergeFileList = Array.from(document.getElementById('file-list').children).map(li => li.dataset.path);
             }
@@ -269,8 +316,9 @@
         const excludePagesStr = document.getElementById('input-exclude-pages').value || "";
 
         if (orderedPaths.length === 0 || !paths.mergeSave) return alert("設定を確認してください");
-        
+        currentMode = "merge";
         showOverlay();
+
         ipcRenderer.send('run-merge', { 
             filePaths: orderedPaths, 
             savePath: paths.mergeSave,
@@ -298,10 +346,29 @@
         document.getElementById('percent-text').innerText = "完了";
         document.getElementById('p-bar').style.width = '100%';
         document.getElementById('overlay-msg').innerHTML = msg;
-        document.getElementById('btn-complete-home').style.display = 'block';
+
         const spinner = document.querySelector('.spinner');
         if (spinner) spinner.style.display = 'none';
+        document.getElementById('post-process-actions').style.display = 'flex';
+        document.getElementById('btn-complete-home').style.display = 'block';
+
+        // ★モードに合わせて相方のボタンを出し分ける
+        if (currentMode === "convert") {
+            document.getElementById('btn-go-to-merge').style.display = 'block';
+            document.getElementById('btn-open-folder').style.display = 'none';
+        } else {
+            document.getElementById('btn-go-to-merge').style.display = 'none';
+            document.getElementById('btn-open-folder').style.display = 'block';
+        }
     });
+
+    function openResultFolder() {
+        const { shell } = require('electron');
+        if (paths.mergeSave) {
+            // ファイルそのものではなく、それが入っているフォルダを選択状態で開く
+            shell.showItemInFolder(paths.mergeSave);
+        }
+    }
 
         // index.html の <script> タグ内の最後の方に追加
     function setupDropZone(zoneId, callback) {
