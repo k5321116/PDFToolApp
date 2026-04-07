@@ -193,6 +193,21 @@
         navTo('view-home');
     }
 
+    function goToMergeDirectly() {
+        // 1. オーバーレイを閉じる
+        document.getElementById('overlay-container').style.display = 'none';
+        
+        // 2. 変換先のフォルダ（paths.convDest）があれば、その中身を結合リストに読み込む
+        if (paths.convDest && fs.existsSync(paths.convDest)) {
+            scanAndPush(paths.convDest);
+            // 読み込み後の件数をUIに反映
+            document.getElementById('txt-merge-count').innerText = `現在：${paths.mergeFileList.length} ファイル`;
+        }
+        
+        // 3. 結合画面（手順1）へ遷移
+        navTo('view-merge-setup');
+    }
+
     function navTo(id) {
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
         document.getElementById(id).classList.add('active');

@@ -5,9 +5,10 @@ import time
 import glob
 import win32com.client
 import pythoncom
-from multiprocessing import Pool
+from multiprocessing import Pool, freeze_support
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+if sys.stdout is not None:
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 def convert_single_file_robust(args):
     word_path_abs, dest_folder = args
@@ -71,6 +72,7 @@ def run_conversion(source_folder, dest_folder):
     print(f"【完了】{total}件の処理に成功しました。", flush=True)
 
 if __name__ == "__main__":
+    freeze_support()  # Windowsでのマルチプロセッシングに必要
     # 引数が2つあるか確認
     if len(sys.argv) >= 3:
         run_conversion(sys.argv[1], sys.argv[2])

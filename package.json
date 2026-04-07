@@ -4,7 +4,8 @@
   "description": "このリポジトリには、記録集制作を効率化するためのPythonスクリプト群を格納しています。\r 事務作業の自動化により、制作時間の短縮とミスの軽減を目的としています。",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "build": "electron-builder"
   },
   "repository": {
     "type": "git",

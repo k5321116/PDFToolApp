@@ -3,7 +3,8 @@ from pypdf import PdfWriter, PdfReader
 from reportlab.pdfgen import canvas
 
 # 日本語パス・文字化け対策
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+if sys.stdout is not None:
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 def create_page_number_pdf(num, total, width, height):
     packet = io.BytesIO()

@@ -41,84 +41,83 @@ ipcMain.handle('select-files-and-dirs', async () => {
 
 // --- Word変換の実行 ---
 ipcMain.on('run-python', (event, data) => {
-  // 実行前に裏で残っているWordを掃除する
-  const { exec } = require('child_process');
+  const { exec, spawn } = require('child_process');
   exec('taskkill /f /im WINWORD.EXE', () => {
-    
     const isPackaged = app.isPackaged;
-    const scriptPath = isPackaged 
-        ? path.join(process.resourcesPath, 'python/Word_to_PDF.exe') // 配布時
-        : path.join(__dirname, 'python/Word_to_PDF.py');            // 開発時
+    const scriptPath = isPackaged
+      ? path.join(process.resourcesPath, 'python/Word_to_PDF.exe')
+      : path.join(__dirname, 'python/Word_to_PDF.py');
 
-    let options = {
-        // パッケージ済み（exe使用）の場合は pythonPath を空にするなどの調整が必要な場合があります
-        mode: 'text',
-        args: [data.sourceDir, data.destDir]
-    };
+    let child;
     if (isPackaged) {
-        options.pythonPath = scriptPath; // exe自体をインタープリタとして指定
-        // あるいは直接外部プロセスとして起動する設定
+      // exe を直接起動
+      child = spawn(scriptPath, [data.sourceDir, data.destDir], { encoding: 'utf8' });
+    } else {
+      child = spawn('python', ['-u', scriptPath, data.sourceDir, data.destDir], { encoding: 'utf8' });
     }
-    // 呼び出し部分
-    let py = new PythonShell(scriptPath, options);
-    let msg = "";
 
-    py.on('message', m => {
-      if (m.startsWith('PROGRESS:')) {
-        event.reply('python-progress', m.split(':')[1]);
-      } else {
-        msg = m;
-      }
+    let msg = "";
+    child.stdout.on('data', (chunk) => {
+      const lines = chunk.toString('utf8').split('\n');
+      lines.forEach(m => {
+        m = m.trim();
+        if (!m) return;
+        if (m.startsWith('PROGRESS:')) {
+          event.reply('python-progress', m.split(':')[1]);
+        } else {
+          msg = m;
+        }
+      });
     });
 
-    py.end(err => {
+    child.on('close', () => {
       event.reply('python-progress', 100);
-      event.reply('python-result', (err && !msg.includes('✅') && !msg.includes('完了')) ? "変換エラー" : msg);
+      event.reply('python-result', msg || "変換完了");
     });
   });
 });
 // --- PDF結合の実行 ---
 ipcMain.on('run-merge', (event, data) => {
+  const { spawn } = require('child_process');
   const isPackaged = app.isPackaged;
-  
-  // 実行するパスの切り分け
-  const scriptPath = isPackaged 
-      ? path.join(process.resourcesPath, 'python/pdf_merger.exe') 
-      : path.join(__dirname, 'python/pdf_merger.py');
+  const scriptPath = isPackaged
+    ? path.join(process.resourcesPath, 'python/pdf_merger.exe')
+    : path.join(__dirname, 'python/pdf_merger.py');
 
-  const pathsString = data.filePaths.join('|'); 
-  const excludeFilesString = data.excludeFiles.join('|'); 
-  
-  let options = {
-    mode: 'text',
-    pythonOptions: isPackaged ? [] : ['-u'],
-    args: [
-        pathsString, 
-        data.savePath, 
-        data.addPageNum ? "True" : "False",
-        data.excludePages || "",
-        excludeFilesString || ""
-    ]
-  };
+  const pathsString = data.filePaths.join('|');
+  const excludeFilesString = data.excludeFiles.join('|');
+  const args = [
+    pathsString,
+    data.savePath,
+    data.addPageNum ? "True" : "False",
+    data.excludePages || "",
+    excludeFilesString || ""
+  ];
 
-  // パッケージ化時は pythonPath を exe 自身に向ける（Python本体不要にするため）
+  let child;
   if (isPackaged) {
-    options.pythonPath = scriptPath;
+    child = spawn(scriptPath, args, { encoding: 'utf8' });
+  } else {
+    child = spawn('python', ['-u', scriptPath, ...args], { encoding: 'utf8' });
   }
-  let pyShell = new PythonShell(scriptPath, options);
-  let lastMsg = "";
 
-  pyShell.on('message', (m) => {
-    if (m.startsWith('PROGRESS:')) {
-      event.reply('python-progress', m.split(':')[1]);
-    } else {
-      lastMsg = m;
-    }
+  let lastMsg = "";
+  child.stdout.on('data', (chunk) => {
+    const lines = chunk.toString('utf8').split('\n');
+    lines.forEach(m => {
+      m = m.trim();
+      if (!m) return;
+      if (m.startsWith('PROGRESS:')) {
+        event.reply('python-progress', m.split(':')[1]);
+      } else {
+        lastMsg = m;
+      }
+    });
   });
 
-  pyShell.end((err) => {
+  child.on('close', () => {
     event.reply('python-progress', 100);
-    event.reply('python-result', (err && !lastMsg.includes('✅')) ? "結合エラー" : lastMsg);
+    event.reply('python-result', lastMsg || "結合完了");
   });
 });
 
