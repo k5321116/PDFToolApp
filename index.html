@@ -177,9 +177,15 @@
     
     
     function navToHome() {
+        paths.convSrc = "";
+        paths.convDest = "";
         paths.mergeFileList = [];
         paths.mergeSave = "";
         checkStates = {};
+        deletedFilesPool = [];
+
+        document.getElementById('txt-conv-src').innerText = '未選択';
+        document.getElementById('txt-conv-dest').innerText = '未選択';
         document.getElementById('txt-merge-count').innerText = '現在：0 ファイル';
         document.getElementById('txt-merge-save').innerText = '未選択';
         document.getElementById('input-exclude-pages').value = '';
